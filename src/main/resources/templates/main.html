@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>회의실 예약</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel="stylesheet" href="/css/bootstrap.min.css">
+<link rel="stylesheet" href="/css/bootstrap-theme.min.css">
+<script src="/js/jquery-3.3.1.min.js"></script> 
+<script src="/js/jquery-ui.min.js" ></script>
+<script src="js/bootstrap.min.js"></script>
+  
+<script type="text/javascript">
+	var startTime = 8;
+	var endTime = 19;
+	var timeScope=[0,30];
+	var maxRepeatCount = 50;
+	var rooms;
+	var clickBtnName = "";
+	
+    $(function () {
+    	
+      $("#span_today").text(today(0,'-'));
+      $("#btn_prev").on("click", function() {
+        $("#span_today").text(today(-1,'-'));
+        $("#in_bookingDate").val($("#span_today").text());
+        ajaxCall("GET", "/api/bookingDates/"+$("#span_today").text().replace(/\-/g,''), {}, getBookingDates); //날짜기준 예약 정보 목록
+      });
+      $("#btn_next").on("click", function() {
+        $("#span_today").text(today(+1,'-'));
+        $("#in_bookingDate").val($("#span_today").text());
+        ajaxCall("GET", "/api/bookingDates/"+$("#span_today").text().replace(/\-/g,''), {}, getBookingDates); //날짜기준 예약 정보 목록
+      });
+ 
+       $("#btn_today").on("click", function() {
+        $("#span_today").text('');
+        $("#span_today").text(today(0,'-'));
+        $("#in_bookingDate").val($("#span_today").text());
+        ajaxCall("GET", "/api/bookingDates/"+$("#span_today").text().replace(/\-/g,''), {}, getBookingDates); //날짜기준 예약 정보 목록
+      });
+       
+       $('#in_bookingDate').val(today(0,'-'));
+       
+       //시작 종료 시간 초기 데이터
+       for(var i=startTime;i<=endTime;i++) {
+    	   $('#sel_startTime,#sel_endTime').append(
+    		 $('<option>',{value:convNumF(i)+convNumF(timeScope[0]),text:convNumF(i)+':'+convNumF(timeScope[0])}),
+    		 $('<option>',{value:convNumF(i)+convNumF(timeScope[1]),text:convNumF(i)+':'+convNumF(timeScope[1])})
+    	   );		   
+       }
+       
+       //반복횟수 초기 세팅
+       for(var i=1;i<=maxRepeatCount;i++) {
+    	   $('#sel_repeatCount').append(
+    		 $('<option>',{value:i,text:i}),
+    	   );		   
+       }
+       $('#sel_repeatCount').hide(); //반복횟수
+      
+       //예약하기
+		$("#btn_booking_save, #btn_booking_update, #btn_booking_delete").on("click", function() {
+			clickBtnName = $(this).attr('id');
+			modifyBooking(clickBtnName);
+			return false;
+		});
+       
+		ajaxCall("GET", "/api/rooms", {}, getRoomList); //회의실
+		ajaxCall("GET", "/api/repeatTypes", {}, getRepeatTypeList); //반복 유형
+		
+		$("#btn_booking_update, #btn_booking_delete").hide();
+       
+    });
+ 
+ 
+//회의실 정보
+function getRoomList(data) {
+	rooms = data;
+	var roomsHtml='';
+	for(var i in data) {
+		roomsHtml = '<tr>';
+		roomsHtml += '<th class="text-center">'+data[i].roomName+'</th>';
+		for(var j=startTime;j<=endTime;j++) {
+			var tdId1 = data[i].roomId + '_' + convNumF(j) + '00_' + convNumF(j) + '30';
+			var tdId2 = data[i].roomId + '_' + convNumF(j) + '30_' + convNumF(j+1) + '00';
+			roomsHtml += '<td onclick="modifyInfoGetBooking(\''+ tdId1 + '\');" id="'+ tdId1 + '">';
+			roomsHtml += '<input type="hidden" id="in_bookingId_'+ tdId1 + '" /></td>';
+			roomsHtml += '<td onclick="modifyInfoGetBooking(\''+ tdId2 + '\');" id="'+ tdId2 + '">';
+			roomsHtml += '<input type="hidden" id="in_bookingId_'+ tdId2 + '" /></td>';
+		}
+		roomsHtml += '</tr>';
+		
+		$('#roosList').append(roomsHtml);
+		$('#sel_rooms').append($('<option>', {
+		    value: data[i].roomId,
+		    text: data[i].roomName
+		}));		
+	}
+	
+	ajaxCall("GET", "/api/bookingDates/"+$("#span_today").text().replace(/\-/g,''), {}, getBookingDates); //날짜기준 예약 정보 목록
+}
+
+//반복유형
+function getRepeatTypeList(data) {
+	for(var i in data) {
+		$('#sel_repeatTypes').append($('<option>', {
+		    value: data[i].repeatTypeId,
+		    text: data[i].repeatTypeName
+		}));		
+	}
+	
+	$('#sel_repeatTypes').change(function() {
+		if($("#sel_repeatTypes option:selected").val()=='') {
+			 $('#sel_repeatCount').hide(); //반복횟수
+		} else {
+			 $('#sel_repeatCount').show(); //반복횟수
+		}
+	});
+}
+
+//일자별 예약정보
+function getBookingDates(res) {
+	for(var i in rooms) {
+		for(var j=startTime;j<=endTime;j++) {
+			$('#' + rooms[i].roomId + '_' + convNumF(j) + '00_' + convNumF(j) + '30').removeClass('bg-primary');
+			$('#' + rooms[i].roomId + '_' + convNumF(j) + '30_' + convNumF(j+1) + '00').removeClass('bg-primary');
+		}
+	}
+	
+	
+	for(var i in res){
+		var rId = res[i].roomId;
+		var uNm = res[i].userName;
+		var sHH = parseInt(res[i].startTime.substring(0,2));
+		var eHH = parseInt(res[i].endTime.substring(0,2));
+		var sMM = parseInt(res[i].startTime.substring(2,4));
+		var eMM = parseInt(res[i].endTime.substring(2,4));
+		
+		var startCount = sMM==0 ? 0 : 1;
+		var endCount = (((eHH-sHH) * 60) - sMM + eMM) / 30;
+		var sHHCount = sHH;
+		var mmPrefix = ['00','30'];
+		endCount = endCount + startCount;
+		
+		for(var j=startCount;j<endCount;j++) {
+			var shhMM = "";
+			var ehhMM = "";
+			if(j%2==0) {
+			 shhMM = convNumF(sHHCount) + mmPrefix[0];
+			 ehhMM = convNumF(sHHCount) + mmPrefix[1];
+			} else {
+			 shhMM = convNumF(sHHCount) + mmPrefix[1];
+			 ehhMM = convNumF(sHHCount+1) + mmPrefix[0];
+			 sHHCount++;
+			}
+			
+			$('#' + rId + '_' + shhMM+"_"+ehhMM).attr("title", res[i].userName + '(' + convNumF(sHH) + ':' +  convNumF(sMM)   +' ~ '  + convNumF(eHH) + ':' +  convNumF(eMM) +')');
+			$('#' + rId + '_' + shhMM+"_"+ehhMM).addClass('bg-primary');
+			$('#in_bookingId_' + rId + '_' + shhMM+"_"+ehhMM).val(res[i].bookingId);
+		}
+	}
+}
+
+//예약하기
+function modifyBooking(btnId) {
+	var form1 = $("#form1").serializeObject();
+	for(var p in form1) {
+		 if(p=='bookingDate') {
+			 form1[p] = form1[p].replace(/\-/g,''); 
+		 }
+	}
+	
+	if(btnId == 'btn_booking_save') {
+		ajaxCall('POST', '/api/bookings', JSON.stringify(form1), callbackModifyBooking);
+	} else if(btnId == 'btn_booking_update') {
+		if( $('#in_bookingId').val() != '' ) {
+			ajaxCall('PUT', '/api/bookings/'+$('#in_bookingId').val(), JSON.stringify(form1), callbackModifyBooking);
+		} else {
+			alertDiv('회의 예약 정보가 없습니다.', 'warning');
+		}
+	} else if(btnId == 'btn_booking_delete') {
+		if(confirm('회의실 예약을 취소 하시겠습니까?')) {
+			if( $('#in_bookingId').val() != '' ) {
+				ajaxCall('DELETE', '/api/bookings/'+$('#in_bookingId').val(), {}, callbackModifyBooking);
+			} else {
+				alertDiv('회의실 예약 정보가 없습니다.', 'warning');
+			}
+		}
+	}
+}
+
+//예약하기 콜백
+function callbackModifyBooking(res) {
+	var data = res.success;
+	var msg = "";
+	if(clickBtnName == 'btn_booking_save') {
+		msg = "완료";
+	} else if(clickBtnName == 'btn_booking_update') {
+		msg = "수정";
+	} else if(clickBtnName == 'btn_booking_delete') {
+		msg = "취소";
+	}
+	
+	alertDiv('회의실 예약을 ' + msg + ' 했습니다.', 'success');
+		
+	ajaxCall("GET", "/api/bookingDates/"+data.bookingDate, {}, getBookingDates); //날짜기준 예약 정보 목록
+	$('#in_bookingId').val('');
+	$('#sel_rooms').val('');
+	$('#in_userName').val('');
+	$("#sel_repeatTypes option:eq(0)").prop("selected", true);
+	$('#sel_repeatCount').val('0');
+	$('#sel_repeatCount').hide();
+	$("#btn_booking_save").show();
+	$("#btn_booking_update, #btn_booking_delete").hide();		
+}
+
+//수정하기위한 정보 조회
+function modifyInfoGetBooking(tdId) {
+	if($('#in_bookingId_' + tdId).val() == '') {
+		$('#in_bookingId').val('');
+		$('#sel_rooms').val('');
+		$('#in_userName').val('');
+		$('#in_bookingDate').val($("#span_today").text());
+		$('#sel_startTime option:eq(0)').prop('selected', true);
+		$('#sel_endTime option:eq(0)').prop('selected', true);
+		$('#sel_repeatTypes option:eq(0)').prop('selected', true);
+		$('#sel_repeatCount').val('');
+		
+		$("#btn_booking_save").show();
+		$("#btn_booking_update, #btn_booking_delete").hide();		
+		
+	} else {
+		ajaxCall('GET', '/api/bookings/'+$('#in_bookingId_' + tdId).val(), {}, callbackModifyInfoGetBooking);
+	}
+}
+//값 세팅
+function callbackModifyInfoGetBooking(res) {
+	if(res.bookingId!='') {
+		$('#in_bookingId').val(res.bookingId);
+		$('#sel_rooms').val(res.roomId);
+		$('#in_userName').val(res.userName);
+		$('#in_bookingDate').val(res.bookingDate.substring(0,4) + '-' + res.bookingDate.substring(4,6) + '-' + res.bookingDate.substring(6,8));
+		$('#sel_startTime').val(res.startTime);
+		$('#sel_endTime').val(res.endTime);
+		$('#sel_repeatTypes').val(res.repeatTypeId);
+		$('#sel_repeatCount').val(res.repeatCount);
+		
+		$("#btn_booking_save").hide();
+		$("#btn_booking_update, #btn_booking_delete").show();
+	}
+}
+
+//ajax callback
+function ajaxCall(_type, _url, _data, _callFunc) {
+    $.ajax({
+        type: _type,
+        contentType: "application/json",
+        url: _url,
+        data: _data,
+        dataType: 'json',
+        success: _callFunc,
+        error: returnError
+    });
+}
+
+//입력 에러 처리
+function returnError(res) {
+	var errorMessage='';
+	if(res.responseJSON.error=='Bad Request') {
+		var errors = res.responseJSON.errors;
+		var errorMessage = "";
+		for(var i in errors) {
+			for(var j in errors[i]) {
+				if(j=='defaultMessage') {
+					errorMessage += errors[i][j] + '<br />';
+				}
+			}
+		}
+		alertDiv(errorMessage, 'danger');
+	} else {
+		alertDiv(res.responseJSON.error, 'danger');
+	}
+	
+}
+
+function alertDiv(msg, css) {
+	$('#div_alert_message').removeAttr('style');
+	$('#div_alert_message').addClass('alert alert-'+css);
+	$('#div_alert_message').html(msg);
+	$('#div_alert_message').show();
+
+	if(css=='danger') {
+		$('#div_alert_message').on('click',function(){$(this).hide();});
+		msg += ' <a href="#" class="alert-link">닫기</a>';
+	} else {
+		setTimeout(function() { $('#div_alert_message').hide() }, 2000);
+		msg += '<br /> <a href="#" class="alert-link">2초후에 닫힙니다.</a>';
+	}
+	
+}
+
+//오늘날짜
+function today(option, prefix) {
+	var strToday = $("#span_today").text();
+    var date = strToday=='' ? new Date() : new Date(strToday.split('.')[1] + "/" + strToday.split('.')[2] + "/" + strToday.split('.')[0]);
+    date.setDate(date.getDate() + option );
+    return date.getFullYear() + prefix + convNumF((date.getMonth()+1)) + prefix + convNumF(date.getDate());
+}
+
+//10이하일 경우 앞에 0 추가
+function convNumF(n) {
+	return (n < 10 ? '0' : '') + n;
+}
+
+$.fn.serializeObject = function() {
+	  "use strict"
+	  var result = {}
+	  var extend = function(i, element) {
+	    var node = result[element.name]
+	    if ("undefined" !== typeof node && node !== null) {
+	      if ($.isArray(node)) {
+	        node.push(element.value)
+	      } else {
+	        result[element.name] = [node, element.value]
+	      }
+	    } else {
+	      result[element.name] = element.value
+	    }
+	  }
+
+	  $.each(this.serializeArray(), extend)
+	  return result
+	}
+</script>
+</head>
+<body>
+
+<nav class="navbar navbar-inverse">
+  <div class="container-fluid">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="/">회의실 예약</a>
+    </div>
+    <ul class="nav navbar-nav">
+      <li class="active"><a href="/">Home</a></li>
+      <li><a href="/swagger-ui.html">Rest API</a></li>
+      <li><a href="/h2">h2 DB</a></li>
+    </ul>
+  </div>
+</nav>
+
+<br />
+ 
+<div class="container">
+
+<div align="left">
+	<div class="btn-group" role="group">
+		<button id="btn_prev" type="button" class="btn btn-default"><</button>
+		<button id="btn_today" type="button" class="btn btn-default"><span id="span_today"></span></button>
+		<button id="btn_next" type="button" class="btn btn-default">></button>
+	</div>
+</div>
+<br />
+ <form class="form-inline" id="form1" name="form1" onsubmit="return false;">
+ 	<input type="hidden" id="in_bookingId" name="bookingId" />
+	<div class="form-group" >
+	  <select id="sel_rooms" name="roomId" class="form-control custom-select"><option value="">회의실 선택</option></select>
+	  <input type="text" id="in_userName" name="userName" class="form-control" placeholder="예약자명" />
+	  <input type="date" id="in_bookingDate" name="bookingDate" class="form-control" />
+	  <select id="sel_startTime" name="startTime" class="form-control"></select> ~
+	  <select id="sel_endTime"   name="endTime"   class="form-control"></select>
+	  <select id="sel_repeatTypes" name="repeatTypeId" class="form-control"><option value="">반복없음</option></select>
+	  <select id="sel_repeatCount" name="repeatCount" class="form-control custom-select"><option value="">횟수</option></select>
+	  <button id="btn_booking_save" class="btn btn-primary">예약</button>
+	  <button id="btn_booking_update" class="btn btn-warning" >수정</button>
+	  <button id="btn_booking_delete" class="btn btn-danger">삭제</button>
+	</div>
+</form>
+ 
+<br />
+
+  <table class="table table-bordered text-center" summary="회의실 예약 현황">
+    <thead>
+      <tr>
+        <th scope="col" class="text-center">회의실 / 시간</th>
+        <th scope="col" colspan="2" class="text-center">08시</th>
+        <th scope="col" colspan="2" class="text-center">09시</th>
+        <th scope="col" colspan="2" class="text-center">10시</th>
+        <th scope="col" colspan="2" class="text-center">11시</th>
+        <th scope="col" colspan="2" class="text-center">12시</th>
+        <th scope="col" colspan="2" class="text-center">13시</th>
+        <th scope="col" colspan="2" class="text-center">14시</th>
+        <th scope="col" colspan="2" class="text-center">15시</th>
+        <th scope="col" colspan="2" class="text-center">16시</th>
+        <th scope="col" colspan="2" class="text-center">17시</th>
+        <th scope="col" colspan="2" class="text-center">18시</th>
+        <th scope="col" colspan="2" class="text-center">19시</th>
+      </tr>
+    </thead>
+    <tbody id="roosList"></tbody>
+  </table>          
+ 
+	<div id="div_alert_message" role="alert"></div>
+</div>
+
+</body>
+</html>

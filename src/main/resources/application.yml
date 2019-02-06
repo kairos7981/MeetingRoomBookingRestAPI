@@ -1,5 +1,12 @@
-spring.jpa.show_sql: true
-spring.jpa.properties.hibernate.format_sql: true
-spring.jpa.properties.hibernate.use_sql_comments: true
-spring.mvc.view.prefix: /WEB-INF/views/
-spring.mvc.view.suffix: .jsp
+spring:
+  main:
+    web-application-type: SERVLET
+  jpa:
+    show-sql: true
+    properties:
+      hibernate.format_sql: true
+      hibernate.use_sql_comments: true
+  mvc:
+    view:
+      prefix: /WEB-INF/views/
+      suffix: .jsp
